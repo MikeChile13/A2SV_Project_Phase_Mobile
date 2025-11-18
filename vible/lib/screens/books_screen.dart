@@ -2,12 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/bible_providers.dart';
 import 'chapters_screen.dart';
+import 'search_screen.dart';
 
-class BooksScreen extends ConsumerWidget {
+class BooksScreen extends ConsumerStatefulWidget {
   const BooksScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<BooksScreen> createState() => _BooksScreenState();
+}
+
+class _BooksScreenState extends ConsumerState<BooksScreen> {
+  bool _showOldTestament = true;
+
+  // Old Testament has 39 books (Genesis to Malachi)
+  static const int oldTestamentCount = 39;
+
+  @override
+  Widget build(BuildContext context) {
     final bibleAsync = ref.watch(bibleProvider);
 
     return Scaffold(
@@ -17,22 +28,75 @@ class BooksScreen extends ConsumerWidget {
       ),
       body: bibleAsync.when(
         data: (books) {
-          return ListView.separated(
-            itemCount: books.length,
-            separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.white10),
-            itemBuilder: (context, i) {
-              final book = books[i];
-              final title = book.name ?? _mapAbbrevToTitle(book.abbrev) ?? book.abbrev;
-              return ListTile(
-                title: Text(title, style: const TextStyle(fontSize: 18)),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => ChaptersScreen(bookIndex: i, bookTitle: title),
-                  ),
+          final displayBooks = _showOldTestament
+              ? books.sublist(0, oldTestamentCount)
+              : books.sublist(oldTestamentCount);
+          final startIndex = _showOldTestament ? 0 : oldTestamentCount;
+
+          return Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: SegmentedButton<bool>(
+                        segments: const [
+                          ButtonSegment<bool>(
+                            value: true,
+                            label: Text('Old Testament'),
+                            icon: Icon(Icons.menu_book),
+                          ),
+                          ButtonSegment<bool>(
+                            value: false,
+                            label: Text('New Testament'),
+                            icon: Icon(Icons.auto_stories),
+                          ),
+                        ],
+                        selected: {_showOldTestament},
+                        onSelectionChanged: (Set<bool> newSelection) {
+                          setState(() {
+                            _showOldTestament = newSelection.first;
+                          });
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    IconButton.filled(
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const SearchScreen(),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.search),
+                      tooltip: 'Search',
+                    ),
+                  ],
                 ),
-              );
-            },
+              ),
+              Expanded(
+                child: ListView.separated(
+                  itemCount: displayBooks.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.white10),
+                  itemBuilder: (context, i) {
+                    final book = displayBooks[i];
+                    final bookIndex = startIndex + i;
+                    final title = book.name ?? _mapAbbrevToTitle(book.abbrev) ?? book.abbrev;
+                    return ListTile(
+                      title: Text(title, style: const TextStyle(fontSize: 18)),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => ChaptersScreen(bookIndex: bookIndex, bookTitle: title),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
