@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/bible_providers.dart';
+import '../screens/chapter_reader_screen.dart';
 
 enum Testament { old, new_, all }
 
@@ -11,11 +12,26 @@ class SearchScreen extends ConsumerStatefulWidget {
   ConsumerState<SearchScreen> createState() => _SearchScreenState();
 }
 
+class SearchResult {
+  final String book;
+  final int chapter;
+  final int verseNumber;
+  final String text;
+
+  SearchResult({
+    required this.book,
+    required this.chapter,
+    required this.verseNumber,
+    required this.text,
+  });
+}
+
 class _SearchScreenState extends ConsumerState<SearchScreen> {
   Testament _selectedTestament = Testament.all;
   String? _selectedBook;
   final TextEditingController _searchController = TextEditingController();
 
+  List<SearchResult> _searchResults = [];
   static const int oldTestamentCount = 39;
 
   @override
@@ -23,6 +39,132 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     _searchController.dispose();
     super.dispose();
   }
+
+  List<String> extractQuotedPhrases(String input) {
+    final regex = RegExp(r'"([^"]+)"');
+    return regex.allMatches(input).map((m) => m.group(1)!.toLowerCase()).toList();
+  }
+
+  List<String> extractUnquotedWords(String input) {
+    // Remove quoted parts first
+    final cleaned = input.replaceAll(RegExp(r'"([^"]+)"'), ' ');
+    final words = cleaned
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .map((w) => w.toLowerCase())
+        .toList();
+    return words;
+  }
+
+  int findBookIndexByName(List<dynamic> books, String name) {
+  return books.indexWhere(
+    (b) => (b.name ?? b.abbrev).toString().toLowerCase() ==
+           name.toLowerCase(),
+  );
+}
+
+  List<SearchResult> performSearch(
+    String query,
+    List<dynamic> books,
+    Testament testament,
+    String? selectedBook,
+  ) {
+    final lowerQuery = query.toLowerCase();
+
+    final phrases = extractQuotedPhrases(lowerQuery);
+    final words = extractUnquotedWords(lowerQuery);
+
+    final results = <SearchResult>[];
+
+    // ---------------------------
+    // 1. DETERMINE SEARCH RANGE
+    // ---------------------------
+    int start = 0;
+    int end = books.length;
+
+    const int oldTestamentCount = 39;
+
+    switch (testament) {
+      case Testament.old:
+        start = 0;
+        end = oldTestamentCount;
+        break;
+
+      case Testament.new_:
+        start = oldTestamentCount;
+        end = books.length;
+        break;
+
+      case Testament.all:
+        start = 0;
+        end = books.length;
+        break;
+    }
+
+    // If a specific book is selected, override the range:
+    int? bookOnlyIndex;
+    if (selectedBook != null) {
+      bookOnlyIndex = books.indexWhere(
+        (b) => (b.name ?? b.abbrev) == selectedBook,
+      );
+
+      if (bookOnlyIndex != -1) {
+        start = bookOnlyIndex;
+        end = bookOnlyIndex + 1;
+      }
+    }
+
+    // ---------------------------
+    // 2. PERFORM SEARCH IN RANGE
+    // ---------------------------
+    for (int b = start; b < end; b++) {
+      final book = books[b];
+      final bookName = book.name ?? book.abbrev;
+
+      for (int c = 0; c < book.chapters.length; c++) {
+        final chapter = book.chapters[c];
+
+        for (int v = 0; v < chapter.length; v++) {
+          final verse = chapter[v].toString();
+          final verseLower = verse.toLowerCase();
+
+          bool matches = true;
+
+          // 1. Check quoted phrases
+          for (final p in phrases) {
+            if (!verseLower.contains(p)) {
+              matches = false;
+              break;
+            }
+          }
+
+          if (!matches) continue;
+
+          // 2. Check word matches
+          for (final w in words) {
+            if (!verseLower.contains(w)) {
+              matches = false;
+              break;
+            }
+          }
+
+          if (matches) {
+            results.add(
+              SearchResult(
+                book: bookName,
+                chapter: c + 1,
+                verseNumber: v + 1,
+                text: verse,
+              ),
+            );
+          }
+        }
+      }
+    }
+
+    return results;
+  }
+
 
   String _getTestamentLabel() {
     switch (_selectedTestament) {
@@ -142,24 +284,82 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     ),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   ),
+
                   onSubmitted: (value) {
-                    // TODO: Implement search functionality
+                    if (value.trim().isEmpty) return;
+
+                    final books = ref.read(bibleProvider).value!;
+
+                    final results = performSearch(
+                      value,
+                      books,
+                      _selectedTestament,
+                      _selectedBook,
+                    );
+
+                    setState(() {
+                      _searchResults = results;
+                    });
                   },
+
                 ),
                 const SizedBox(height: 16),
                 Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.white10),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Center(
-                      child: Text(
-                        'Search the Word',
-                        style: TextStyle(color: Colors.white38, fontSize: 16),
-                      ),
-                    ),
-                  ),
+                  child: _searchResults.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'Search the Word',
+                            style: TextStyle(color: Colors.white38, fontSize: 16),
+                          ),
+                        )
+                      : ListView.builder(
+                          itemCount: _searchResults.length,
+                          itemBuilder: (context, index) {
+                            final r = _searchResults[index];
+
+                            // return ListTile(
+                            //   title: Text(
+                            //     '${r.book} ${r.chapter}:${r.verseNumber}',
+                            //     style: const TextStyle(fontWeight: FontWeight.bold),
+                            //   ),
+                            //   subtitle: Text(r.text),
+                            //   contentPadding: const EdgeInsets.symmetric(
+                            //     horizontal: 12,
+                            //     vertical: 8,
+                            //   ),
+                            // );
+                            return ListTile(
+                                title: Text(
+                                  '${r.book} ${r.chapter}:${r.verseNumber}',
+                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                subtitle: Text(r.text),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                onTap: () {
+                                  final books = ref.read(bibleProvider).value!;
+                                  final bookIndex = findBookIndexByName(books, r.book);
+
+                                  if (bookIndex == -1) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Error: Could not locate book "${r.book}".')),
+                                    );
+                                    return;
+                                  }
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => ChapterReaderScreen(
+                                        bookIndex: bookIndex,
+                                        chapterIndex: r.chapter - 1,
+                                        bookTitle: r.book,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              );
+
+                          },
+                        ),
                 ),
               ],
             ),
