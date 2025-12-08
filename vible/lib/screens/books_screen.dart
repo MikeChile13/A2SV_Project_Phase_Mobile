@@ -23,7 +23,7 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Vible'),
+        title: const Text('Veritas Bible'),
         centerTitle: true,
       ),
       body: bibleAsync.when(
