@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'home_page.dart';
-import 'details_page.dart';
-import 'search_page.dart';
+// import 'details_page.dart';
 
 void main() {
   runApp(const MyApp());
@@ -35,7 +34,6 @@ class MyApp extends StatelessWidget {
         '/home': (context) => const HomePage(),
         // details route is not registered because it requires a `Product` argument;
         // navigation to DetailsPage uses MaterialPageRoute with the product instance.
-        '/search': (context) => const SearchPage(),
       },
     );
   }

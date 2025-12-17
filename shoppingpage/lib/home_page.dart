@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'models/product.dart';
 import 'add_product.dart';
 import 'details_page.dart';
+import 'search_page.dart';
 // import 'platform_image_io.dart';
 // class HomePage extends StatelessWidget {
 //   const HomePage({super.key});
@@ -200,7 +201,12 @@ class _HomePageState extends State<HomePage> {
                   IconButton(
                     icon: const Icon(Icons.search),
                     onPressed: () {
-                      //search action 
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => SearchPage(products: _products),
+                        ),
+                      );
                     },
                   ),
                 ],
@@ -254,11 +260,13 @@ class _HomePageState extends State<HomePage> {
                               margin: const EdgeInsets.only(bottom: 16),
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: Colors.grey[100],
+                                color: Theme.of(context).colorScheme.surface,
                                 borderRadius: BorderRadius.circular(12),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.grey.withOpacity(0.2),
+                                    color: Theme.of(context).brightness == Brightness.dark
+                                        ? Colors.black.withOpacity(0.6)
+                                        : Colors.grey.withOpacity(0.2),
                                     blurRadius: 5,
                                     offset: const Offset(0, 3),
                                   ),
@@ -286,7 +294,7 @@ class _HomePageState extends State<HomePage> {
                                     product.category,
                                     style: TextStyle(
                                       fontSize: 14,
-                                      color: Colors.grey[600],
+                                      color: Theme.of(context).textTheme.bodyMedium?.color,
                                     ),
                                   ),
                                   const SizedBox(height: 4),
