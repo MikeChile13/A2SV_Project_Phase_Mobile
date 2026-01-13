@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/bible_providers.dart';
 import '../screens/chapter_reader_screen.dart';
+import '../providers/highlight_provider.dart';
 
 enum Testament { old, new_, all }
 
@@ -41,19 +42,79 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   List<String> extractQuotedPhrases(String input) {
-    final regex = RegExp(r'"([^"]+)"');
-    return regex.allMatches(input).map((m) => m.group(1)!.toLowerCase()).toList();
+    // Match either "..." or '...'; ensure opening and closing quotes are the same
+    final regex = RegExp(r'"([^"]+)"|' + r"'([^']+)'");
+    return regex.allMatches(input).map((m) {
+      return (m.group(1) ?? m.group(2))!.toLowerCase();
+    }).toList();
   }
+
+
 
   List<String> extractUnquotedWords(String input) {
     // Remove quoted parts first
-    final cleaned = input.replaceAll(RegExp(r'"([^"]+)"'), ' ');
+    // remove both double- and single-quoted phrases (matching pairs)
+    final cleaned = input.replaceAll(RegExp(r'"([^"]+)"|' + r"'([^']+)'"), ' ');
     final words = cleaned
         .split(RegExp(r'\s+'))
         .where((w) => w.isNotEmpty)
         .map((w) => w.toLowerCase())
         .toList();
     return words;
+  }
+
+  Widget _buildHighlightedText(String text) {
+    final query = _searchController.text.trim();
+
+    final phrases = extractQuotedPhrases(query);
+    final words = extractUnquotedWords(query);
+
+    final terms = <String>{};
+    terms.addAll(phrases);
+    terms.addAll(words);
+
+    if (terms.isEmpty) {
+      return Text(
+        text,
+        style: const TextStyle(color: Colors.white),
+      );
+    }
+
+    final sortedTerms = terms.toList()..sort((a, b) => b.length.compareTo(a.length));
+    final pattern = sortedTerms.map(RegExp.escape).join('|');
+    final reg = RegExp(pattern, caseSensitive: false);
+
+    final matches = reg.allMatches(text).toList();
+    if (matches.isEmpty) {
+      return Text(
+        text,
+        style: const TextStyle(color: Colors.white),
+      );
+    }
+
+    final defaultColor = Colors.white;
+    final children = <TextSpan>[];
+    int last = 0;
+
+    for (final m in matches) {
+      if (m.start > last) {
+        children.add(TextSpan(text: text.substring(last, m.start), style: TextStyle(color: defaultColor)));
+      }
+
+      final matchText = text.substring(m.start, m.end);
+      final selectedColor = ref.watch(highlightColorProvider);
+      children.add(TextSpan(text: matchText, style: TextStyle(color: selectedColor)));
+
+      last = m.end;
+    }
+
+    if (last < text.length) {
+      children.add(TextSpan(text: text.substring(last), style: TextStyle(color: defaultColor)));
+    }
+
+    return RichText(
+      text: TextSpan(children: children, style: const TextStyle(fontSize: 14)),
+    );
   }
 
   int findBookIndexByName(List<dynamic> books, String name) {
@@ -316,24 +377,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                           itemCount: _searchResults.length,
                           itemBuilder: (context, index) {
                             final r = _searchResults[index];
-
-                            // return ListTile(
-                            //   title: Text(
-                            //     '${r.book} ${r.chapter}:${r.verseNumber}',
-                            //     style: const TextStyle(fontWeight: FontWeight.bold),
-                            //   ),
-                            //   subtitle: Text(r.text),
-                            //   contentPadding: const EdgeInsets.symmetric(
-                            //     horizontal: 12,
-                            //     vertical: 8,
-                            //   ),
-                            // );
                             return ListTile(
                                 title: Text(
                                   '${r.book} ${r.chapter}:${r.verseNumber}',
                                   style: const TextStyle(fontWeight: FontWeight.bold),
                                 ),
-                                subtitle: Text(r.text),
+                                subtitle: _buildHighlightedText(r.text),
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                 onTap: () {
                                   final books = ref.read(bibleProvider).value!;
@@ -345,6 +394,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                     );
                                     return;
                                   }
+
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
@@ -352,12 +402,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                         bookIndex: bookIndex,
                                         chapterIndex: r.chapter - 1,
                                         bookTitle: r.book,
+                                        initialVerseIndex: r.verseNumber - 1, // ← Triggers flash + scroll
                                       ),
                                     ),
                                   );
                                 },
                               );
-
                           },
                         ),
                 ),

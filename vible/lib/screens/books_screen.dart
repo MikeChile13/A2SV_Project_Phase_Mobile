@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/bible_providers.dart';
 import 'chapters_screen.dart';
 import 'search_screen.dart';
+import 'settings_screen.dart';
 
 class BooksScreen extends ConsumerStatefulWidget {
   const BooksScreen({super.key});
@@ -25,6 +26,20 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
       appBar: AppBar(
         title: const Text('Veritas Bible'),
         centerTitle: true,
+        actions: [
+          Padding(
+  padding: const EdgeInsets.only(right: 16.0), // adjust setting icon padding
+  child: IconButton(
+    icon: const Icon(Icons.settings),
+    tooltip: 'Settings',
+    onPressed: () {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const SettingsScreen()),
+      );
+    },
+  ),
+),
+        ],
       ),
       body: bibleAsync.when(
         data: (books) {

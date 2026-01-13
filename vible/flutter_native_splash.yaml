@@ -1,0 +1,21 @@
+flutter_native_splash:
+  # Background color
+  color: "#191919"        #0E0E0E
+  image: assets/splash_logo.png   #logo
+
+  # Optional: full-screen image (if image should fill screen)
+  # fill: true
+
+  # Android 12+ splash screen support
+  android_12:
+    image: assets/splash_logo.png
+    color: "#191919"
+
+  # iOS settings
+  ios: true
+
+  # Android settings
+  android: true
+
+  # Web
+  web: true
