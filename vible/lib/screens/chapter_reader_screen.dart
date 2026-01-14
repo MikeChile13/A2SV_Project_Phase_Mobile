@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../providers/bible_providers.dart';
 import '../providers/highlight_provider.dart';
-import '../providers/bookmark_provider.dart'; // ← NEW
+import '../providers/bookmark_provider.dart';
 
 class ChapterReaderScreen extends ConsumerStatefulWidget {
   final int bookIndex;
@@ -28,6 +29,8 @@ class _ChapterReaderScreenState extends ConsumerState<ChapterReaderScreen> {
   bool _highlightMode = false;
   Color? _activeHighlightColor;
   int? _flashVerseIndex;
+  bool _shareMode = false;
+  Set<int> _selectedVerses = {};
 
   final ItemScrollController _itemScrollController = ItemScrollController();
   final ItemPositionsListener _itemPositionsListener = ItemPositionsListener.create();
@@ -82,6 +85,55 @@ class _ChapterReaderScreenState extends ConsumerState<ChapterReaderScreen> {
     });
   }
 
+  void _enterShareMode() {
+    setState(() {
+      _shareMode = true;
+      _selectedVerses.clear();
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Share mode — tap verses to select, then share')),
+    );
+  }
+
+  void _exitShareMode() {
+    setState(() {
+      _shareMode = false;
+      _selectedVerses.clear();
+    });
+  }
+
+  void _toggleVerseSelection(int verseIndex) {
+    if (!_shareMode) return;
+
+    setState(() {
+      if (_selectedVerses.contains(verseIndex)) {
+        _selectedVerses.remove(verseIndex);
+      } else {
+        _selectedVerses.add(verseIndex);
+      }
+    });
+  }
+
+  Future<void> _shareSelectedVerses(List<String> verses) async {
+    if (_selectedVerses.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select verses to share')),
+      );
+      return;
+    }
+
+    final sortedIndices = _selectedVerses.toList()..sort();
+    final bookChapter = '${widget.bookTitle} ${widget.chapterIndex + 1}';
+    final verseLines = sortedIndices.map((i) {
+      return '${i + 1}. "${verses[i]}"';
+    }).join('\n\n');
+
+    final shareText = '$bookChapter\n\n$verseLines\n\n— Veritas Bible';
+
+    await Share.share(shareText);
+  }
+
   void _toggleHighlight(int verseIndex) {
     if (!_highlightMode || _activeHighlightColor == null) return;
 
@@ -113,6 +165,70 @@ class _ChapterReaderScreenState extends ConsumerState<ChapterReaderScreen> {
             );
           }).toList(),
         ),
+      ),
+    );
+  }
+
+  void _showBookmarkDialog(
+    BuildContext context,
+    WidgetRef ref,
+    int verseIndex,
+    String verseText,
+    bool isBookmarked,
+  ) {
+    final bookmarkNotifier = ref.read(bookmarkProvider.notifier);
+    final bookmarks = ref.read(bookmarkProvider);
+    
+    final existingBookmark = bookmarks.where(
+      (b) => b.bookIndex == widget.bookIndex &&
+          b.chapterIndex == widget.chapterIndex &&
+          b.verseIndex == verseIndex,
+    ).firstOrNull;
+
+    final noteController = TextEditingController(text: existingBookmark?.note ?? '');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add Bookmark'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: noteController,
+              maxLines: 3,
+              decoration: InputDecoration(
+                hintText: 'Add a note (optional)',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              bookmarkNotifier.toggleBookmark(
+                bookIndex: widget.bookIndex,
+                chapterIndex: widget.chapterIndex,
+                verseIndex: verseIndex,
+                bookName: widget.bookTitle,
+                verseText: verseText,
+                note: noteController.text.isNotEmpty ? noteController.text : null,
+              );
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Bookmark added'), duration: Duration(seconds: 1)),
+              );
+            },
+            child: const Text('Bookmark'),
+          ),
+        ],
       ),
     );
   }
@@ -159,6 +275,11 @@ class _ChapterReaderScreenState extends ConsumerState<ChapterReaderScreen> {
                   tooltip: 'Exit highlight mode',
                   onPressed: _exitHighlightMode,
                 ),
+              IconButton(
+                icon: Icon(_shareMode ? Icons.close : Icons.share),
+                tooltip: _shareMode ? 'Exit share mode' : 'Share verses',
+                onPressed: _shareMode ? _exitShareMode : _enterShareMode,
+              ),
             ],
           ),
           body: Column(
@@ -179,7 +300,14 @@ class _ChapterReaderScreenState extends ConsumerState<ChapterReaderScreen> {
                     // Flash from search
                     final isFlashing = _flashVerseIndex == i;
                     final flashOverlay = searchHighlightColor.withOpacity(isFlashing ? 0.5 : 0.0);
-                    final backgroundColor = Color.lerp(baseColor, flashOverlay, isFlashing ? 1.0 : 0.0)!;
+                    
+                    // Share mode selection highlight
+                    final isSelected = _selectedVerses.contains(i);
+                    final shareHighlight = isSelected ? Colors.blue.withOpacity(0.3) : Colors.transparent;
+                    
+                    final backgroundColor = _shareMode
+                        ? Color.lerp(baseColor, shareHighlight, isSelected ? 1.0 : 0.0)!
+                        : Color.lerp(baseColor, flashOverlay, isFlashing ? 1.0 : 0.0)!;
 
                     // Check if this verse is bookmarked
                     final isBookmarked = bookmarkNotifier.isBookmarked(
@@ -201,81 +329,18 @@ class _ChapterReaderScreenState extends ConsumerState<ChapterReaderScreen> {
                           onTap: () {
                             if (_highlightMode) {
                               _toggleHighlight(i);
+                            } else if (_shareMode) {
+                              _toggleVerseSelection(i);
                             }
                           },
-                          onLongPress: () async {
-                            final selection = await showModalBottomSheet<String>(
-                              context: context,
-                              builder: (ctx) {
-                                return SafeArea(
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      ListTile(
-                                        leading: Icon(
-                                          isBookmarked ? Icons.bookmark : Icons.bookmark_border,
-                                          color: Colors.amber,
-                                        ),
-                                        title: Text(isBookmarked ? 'Remove Bookmark' : 'Add Bookmark'),
-                                        onTap: () => Navigator.of(ctx).pop('bookmark'),
-                                      ),
-                                      ListTile(
-                                        leading: const Icon(Icons.note_add),
-                                        title: const Text('Add Note'),
-                                        onTap: () => Navigator.of(ctx).pop('note'),
-                                      ),
-                                      ListTile(
-                                        leading: const Icon(Icons.share),
-                                        title: const Text('Share Verse'),
-                                        onTap: () => Navigator.of(ctx).pop('share'),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
+                          onLongPress: () {
+                            _showBookmarkDialog(
+                              context,
+                              ref,
+                              i,
+                              verseText,
+                              isBookmarked,
                             );
-
-                            if (selection == null) return;
-
-                            final reference = '${widget.bookTitle} ${widget.chapterIndex + 1}:${i + 1}';
-                            final fullVerse = '$reference\n\n"$verseText"';
-
-                            switch (selection) {
-                              case 'bookmark':
-                                bookmarkNotifier.toggleBookmark(
-                                  bookIndex: widget.bookIndex,
-                                  chapterIndex: widget.chapterIndex,
-                                  verseIndex: i,
-                                  bookName: widget.bookTitle,
-                                  verseText: verseText,
-                                );
-
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      isBookmarked ? 'Bookmark removed' : 'Bookmark added',
-                                    ),
-                                    duration: const Duration(seconds: 1),
-                                  ),
-                                );
-                                break;
-
-                              case 'note':
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Notes feature coming soon!')),
-                                );
-                                break;
-
-                              case 'share':
-                                // Placeholder — replace with share_plus later
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Share:\n\n$fullVerse\n\n— Veritas Bible'),
-                                    duration: const Duration(seconds: 3),
-                                  ),
-                                );
-                                break;
-                            }
                           },
                           child: Padding(
                             padding: const EdgeInsets.all(8),
@@ -313,13 +378,38 @@ class _ChapterReaderScreenState extends ConsumerState<ChapterReaderScreen> {
                   },
                 ),
               ),
-              _BottomNav(
-                hasPrevious: hasPrevious,
-                hasNext: hasNext,
-                bookIndex: widget.bookIndex,
-                chapterIndex: widget.chapterIndex,
-                bookTitle: widget.bookTitle,
-              ),
+              if (_shareMode && _selectedVerses.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF191919),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, -2)),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '${_selectedVerses.length} verse${_selectedVerses.length > 1 ? 's' : ''} selected',
+                        style: const TextStyle(fontSize: 16, color: Colors.white70),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: () => _shareSelectedVerses(verses),
+                        icon: const Icon(Icons.share),
+                        label: const Text('Share'),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                _BottomNav(
+                  hasPrevious: hasPrevious,
+                  hasNext: hasNext,
+                  bookIndex: widget.bookIndex,
+                  chapterIndex: widget.chapterIndex,
+                  bookTitle: widget.bookTitle,
+                ),
             ],
           ),
         );

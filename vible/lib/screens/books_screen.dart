@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/bible_providers.dart';
+import 'bookmarks_screen.dart';
 import 'chapters_screen.dart';
 import 'search_screen.dart';
 import 'settings_screen.dart';
@@ -26,27 +27,35 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
       appBar: AppBar(
         title: const Text('Veritas Bible'),
         centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(Icons.bookmark),
+          tooltip: 'Bookmarks',
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const BookmarksScreen()),
+            );
+          },
+        ),
         actions: [
           Padding(
-  padding: const EdgeInsets.only(right: 16.0), // adjust setting icon padding
-  child: IconButton(
-    icon: const Icon(Icons.settings),
-    tooltip: 'Settings',
-    onPressed: () {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const SettingsScreen()),
-      );
-    },
-  ),
-),
+            padding: const EdgeInsets.only(right: 16.0),
+            child: IconButton(
+              icon: const Icon(Icons.settings),
+              tooltip: 'Settings',
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                );
+              },
+            ),
+          ),
         ],
       ),
       body: bibleAsync.when(
         data: (books) {
-          final displayBooks = _showOldTestament
+            final displayBooks = _showOldTestament
               ? books.sublist(0, oldTestamentCount)
               : books.sublist(oldTestamentCount);
-          final startIndex = _showOldTestament ? 0 : oldTestamentCount;
 
           return Column(
             children: [
@@ -97,8 +106,8 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
                   separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.white10),
                   itemBuilder: (context, i) {
                     final book = displayBooks[i];
-                    final bookIndex = startIndex + i;
-                    final title = book.name ?? _mapAbbrevToTitle(book.abbrev) ?? book.abbrev;
+                    final bookIndex = i + (_showOldTestament ? 0 : oldTestamentCount);
+                    final title = book.name ?? book.abbrev;
                     return ListTile(
                       title: Text(title, style: const TextStyle(fontSize: 18)),
                       trailing: const Icon(Icons.chevron_right),
@@ -120,17 +129,5 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
     );
   }
 
-  // If abbrev is like "gn" you may prefer mapping to "Genesis". Optional.
-  String? _mapAbbrevToTitle(String abbrev) {
-    // Minimal mapping; your JSON may already include 'name'
-    const map = {
-      'gn': 'Genesis',
-      'ex': 'Exodus',
-      'lv': 'Leviticus',
-      'nm': 'Numbers',
-      'dt': 'Deuteronomy',
-      // extend as needed
-    };
-    return map[abbrev.toLowerCase()];
-  }
+  // No local abbrev-to-title mapping — use JSON `name` or `abbrev` fallback.
 }

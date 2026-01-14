@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
-// Each bookmark stores: bookIndex, chapterIndex, verseIndex, bookName, verseText
+// Each bookmark stores: bookIndex, chapterIndex, verseIndex, bookName, verseText, and optional note
 class Bookmark {
   final int bookIndex;
   final int chapterIndex;
@@ -10,6 +10,7 @@ class Bookmark {
   final String bookName;
   final String verseText;
   final DateTime addedAt;
+  final String? note;
 
   Bookmark({
     required this.bookIndex,
@@ -18,6 +19,7 @@ class Bookmark {
     required this.bookName,
     required this.verseText,
     required this.addedAt,
+    this.note,
   });
 
   Map<String, dynamic> toJson() => {
@@ -27,6 +29,7 @@ class Bookmark {
         'bookName': bookName,
         'verseText': verseText,
         'addedAt': addedAt.millisecondsSinceEpoch,
+        'note': note,
       };
 
   factory Bookmark.fromJson(Map<String, dynamic> json) => Bookmark(
@@ -36,6 +39,7 @@ class Bookmark {
         bookName: json['bookName'],
         verseText: json['verseText'],
         addedAt: DateTime.fromMillisecondsSinceEpoch(json['addedAt']),
+        note: json['note'],
       );
 }
 
@@ -68,6 +72,7 @@ class BookmarkNotifier extends StateNotifier<List<Bookmark>> {
     required int verseIndex,
     required String bookName,
     required String verseText,
+    String? note,
   }) {
     final key = '$bookIndex-$chapterIndex-$verseIndex';
 
@@ -87,11 +92,42 @@ class BookmarkNotifier extends StateNotifier<List<Bookmark>> {
         bookName: bookName,
         verseText: verseText,
         addedAt: DateTime.now(),
+        note: note,
       );
       state = [newBookmark, ...state];
     }
 
     _saveBookmarks();
+  }
+
+  void updateBookmarkNote({
+    required int bookIndex,
+    required int chapterIndex,
+    required int verseIndex,
+    required String note,
+  }) {
+    final key = '$bookIndex-$chapterIndex-$verseIndex';
+    final existingIndex = state.indexWhere(
+      (b) => '${b.bookIndex}-${b.chapterIndex}-${b.verseIndex}' == key,
+    );
+
+    if (existingIndex != -1) {
+      final updated = state[existingIndex];
+      state = [
+        ...state.sublist(0, existingIndex),
+        Bookmark(
+          bookIndex: updated.bookIndex,
+          chapterIndex: updated.chapterIndex,
+          verseIndex: updated.verseIndex,
+          bookName: updated.bookName,
+          verseText: updated.verseText,
+          addedAt: updated.addedAt,
+          note: note.isEmpty ? null : note,
+        ),
+        ...state.sublist(existingIndex + 1),
+      ];
+      _saveBookmarks();
+    }
   }
 
   bool isBookmarked(int bookIndex, int chapterIndex, int verseIndex) {
