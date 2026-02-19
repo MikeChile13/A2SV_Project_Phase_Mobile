@@ -154,13 +154,6 @@ class _ChapterReaderScreenState extends ConsumerState<ChapterReaderScreen> {
     );
   }
 
-  void _exitHighlightMode() {
-    setState(() {
-      _highlightMode = false;
-      _activeHighlightColor = null;
-    });
-  }
-
   void _enterShareMode() {
     setState(() {
       _shareMode = true;
