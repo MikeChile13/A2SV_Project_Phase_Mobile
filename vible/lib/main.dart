@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'screens/books_screen.dart';
+import 'dart:io' show Platform;
+// import 'screens/books_screen.dart';
+import 'screens/splash_screen.dart';
 
 void main() {
   runApp(const ProviderScope(child: VibleApp()));
@@ -18,6 +20,7 @@ class VibleApp extends StatelessWidget {
         brightness: Brightness.dark,
         primarySwatch: Colors.grey,
         scaffoldBackgroundColor: Colors.black,
+        fontFamily: _getDefaultFontFamily(),
         appBarTheme: const AppBarTheme(
           color: Color(0xFF191919),
           elevation: 0,
@@ -30,7 +33,19 @@ class VibleApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const BooksScreen(),
+      home: const VibleSplashScreen(),
     );
+  }
+
+  String _getDefaultFontFamily() {
+    try {
+      if (Platform.isLinux) return 'Ubuntu';
+      if (Platform.isMacOS) return '.AppleSystemUIFont';
+      if (Platform.isWindows) return 'Segoe UI';
+      return 'Roboto';
+    } catch (_) {
+      // On web or other platforms, use Roboto (default)
+      return 'Roboto';
+    }
   }
 }

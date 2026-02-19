@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/highlight_provider.dart';
+import '../providers/splash_screen_provider.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -8,6 +9,7 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final current = ref.watch(highlightColorProvider);
+    final showSplash = ref.watch(splashScreenProvider);
     final options = [
       {'name': 'Yellow', 'color': Colors.amberAccent},
       {'name': 'Orange', 'color': Colors.orangeAccent},
@@ -44,6 +46,20 @@ class SettingsScreen extends ConsumerWidget {
                   onSelected: (_) => ref.read(highlightColorProvider.notifier).state = color,
                 );
               }).toList(),
+            ),
+            const SizedBox(height: 32),
+            const Text(
+              'Display Options',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            SwitchListTile(
+              title: const Text('Show Splash Screen'),
+              subtitle: const Text('Display the splash screen on app launch'),
+              value: showSplash,
+              onChanged: (value) {
+                ref.read(splashScreenProvider.notifier).toggleSplashScreen(value);
+              },
             ),
           ],
         ),

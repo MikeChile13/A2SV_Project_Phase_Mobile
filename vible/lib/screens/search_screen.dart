@@ -332,6 +332,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                         disabledHint: const Text('All books'),
                       ),
                     ),
+                    if (_selectedTestament != Testament.all && _selectedBook != null)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: IconButton(
+                          icon: const Icon(Icons.close),
+                          tooltip: 'Clear selection',
+                          onPressed: () {
+                            setState(() {
+                              _selectedBook = null;
+                            });
+                          },
+                        ),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 16),
