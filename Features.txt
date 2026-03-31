@@ -1,0 +1,19 @@
+Features implemented:
+*verse highlighting
+*search
+*scroll to verse when search
+*navigation
+*share feature
+*bookmark
+*settings:
+	Theme
+*highlight
+
+To implement:
+*grouping notes per topic
+*onboarding page
+*KJV translations to modern English
+*different color themes, light mode.
+*Multiple tabs for windows version
+*in-chapter search.
+*Beam of grace links.

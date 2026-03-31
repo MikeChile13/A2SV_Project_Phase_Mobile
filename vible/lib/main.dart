@@ -22,7 +22,7 @@ class VibleApp extends StatelessWidget {
         scaffoldBackgroundColor: Colors.black,
         fontFamily: _getDefaultFontFamily(),
         appBarTheme: const AppBarTheme(
-          color: Color(0xFF191919),
+          backgroundColor: Color(0xFF191919),
           elevation: 0,
         ),
         cardTheme: CardThemeData(
