@@ -200,7 +200,7 @@ class ViblePainter extends CustomPainter {
       ..shader = const LinearGradient(
         colors: [Color(0xFF7C3AED), Color(0xFFA855F7)],
       ).createShader(Rect.fromCircle(center: Offset.zero, radius: 65 * scaleFactor))
-      ..color = Colors.white.withOpacity(0.3);
+      ..color = Colors.white.withValues(alpha: 0.3);
     canvas.drawCircle(Offset.zero, 65 * scaleFactor, ringPaint);
     canvas.restore();
 
@@ -216,7 +216,7 @@ class ViblePainter extends CustomPainter {
           end: Alignment.bottomCenter,
           colors: [Color(0xFFE9D5FF), Color(0xFFD8B4FE), Color(0xFFC084FC)],
         ).createShader(Rect.fromLTWH(-16, -28, 32, 46))
-        ..color = Colors.white.withOpacity(crossOpacity);
+        ..color = Colors.white.withValues(alpha: crossOpacity);
 
       // Vertical bar
       canvas.drawRRect(
@@ -246,7 +246,7 @@ class ViblePainter extends CustomPainter {
         textPainter.text = TextSpan(
           text: veritas[i],
           style: TextStyle(
-            color: const Color(0xFFD8B4FE).withOpacity(letterOpacities[i]),
+            color: const Color(0xFFD8B4FE).withValues(alpha: letterOpacities[i]),
             fontSize: 12 * scaleFactor,
             fontFamily: 'Serif',
             fontWeight: FontWeight.w500,
@@ -259,7 +259,7 @@ class ViblePainter extends CustomPainter {
     }
 
     // 5. Decorative Dots
-    final dotPaint = Paint()..color = const Color(0xFFA78BFA).withOpacity(0.6);
+    final dotPaint = Paint()..color = const Color(0xFFA78BFA).withValues(alpha: 0.6);
     if (dotsScale > 0) {
       canvas.drawCircle(Offset(center.dx, center.dy - (65 * scaleFactor)), 2 * scaleFactor * dotsScale, dotPaint);
       canvas.drawCircle(Offset(center.dx, center.dy + (65 * scaleFactor)), 2 * scaleFactor * dotsScale, dotPaint);

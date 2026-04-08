@@ -4,7 +4,7 @@ import '../providers/highlight_provider.dart';
 import '../providers/splash_screen_provider.dart';
 
 class SettingsScreen extends ConsumerWidget {
-  const SettingsScreen({Key? key}) : super(key: key);
+  const SettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -42,7 +42,7 @@ class SettingsScreen extends ConsumerWidget {
                   avatar: CircleAvatar(backgroundColor: color, radius: 10),
                   label: Text(name),
                   selected: current == color,
-                  selectedColor: color.withOpacity(0.2),
+                  selectedColor: color.withValues(alpha: 0.2),
                   onSelected: (_) => ref.read(highlightColorProvider.notifier).state = color,
                 );
               }).toList(),

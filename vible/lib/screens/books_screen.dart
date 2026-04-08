@@ -5,6 +5,7 @@ import 'bookmarks_screen.dart';
 import 'chapters_screen.dart';
 import 'search_screen.dart';
 import 'settings_screen.dart';
+import 'study_view_screen.dart';
 
 class BooksScreen extends ConsumerStatefulWidget {
   const BooksScreen({super.key});
@@ -37,6 +38,15 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
           },
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.grid_view),
+            tooltip: 'Study View',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const StudyViewScreen()),
+              );
+            },
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 16.0),
             child: IconButton(

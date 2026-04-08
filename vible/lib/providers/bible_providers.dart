@@ -14,6 +14,7 @@ class TabState {
   final String bookTitle;
   final int? initialVerseIndex;
   final String? searchQuery;
+  final bool showOldTestament;
 
   const TabState({
     required this.bookIndex,
@@ -21,6 +22,7 @@ class TabState {
     required this.bookTitle,
     this.initialVerseIndex,
     this.searchQuery,
+    this.showOldTestament = true,
   });
 
   TabState copyWith({
@@ -29,6 +31,7 @@ class TabState {
     String? bookTitle,
     int? initialVerseIndex,
     String? searchQuery,
+    bool? showOldTestament,
   }) {
     return TabState(
       bookIndex: bookIndex ?? this.bookIndex,
@@ -36,6 +39,7 @@ class TabState {
       bookTitle: bookTitle ?? this.bookTitle,
       initialVerseIndex: initialVerseIndex ?? this.initialVerseIndex,
       searchQuery: searchQuery ?? this.searchQuery,
+      showOldTestament: showOldTestament ?? this.showOldTestament,
     );
   }
 }
@@ -44,6 +48,7 @@ class TabManager extends StateNotifier<List<TabState>> {
   TabManager() : super([]); // Start with no tabs
 
   void addTab(TabState tabState) {
+    if (state.length >= 4) return;
     state = [...state, tabState];
   }
 

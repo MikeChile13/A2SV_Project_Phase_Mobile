@@ -43,7 +43,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   List<String> extractQuotedPhrases(String input) {
     // Match either "..." or '...'; ensure opening and closing quotes are the same
-    final regex = RegExp(r'"([^"]+)"|' + r"'([^']+)'");
+    final regex = RegExp(r'"([^"]+)"|' r"'([^']+)'");
     return regex.allMatches(input).map((m) {
       return (m.group(1) ?? m.group(2))!.toLowerCase();
     }).toList();
@@ -54,7 +54,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   List<String> extractUnquotedWords(String input) {
     // Remove quoted parts first
     // remove both double- and single-quoted phrases (matching pairs)
-    final cleaned = input.replaceAll(RegExp(r'"([^"]+)"|' + r"'([^']+)'"), ' ');
+    final cleaned = input.replaceAll(RegExp(r'"([^"]+)"|' r"'([^']+)'"), ' ');
     final words = cleaned
         .split(RegExp(r'\s+'))
         .where((w) => w.isNotEmpty)
@@ -305,7 +305,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        value: _selectedBook,
+                        initialValue: _selectedBook,
                         decoration: InputDecoration(
                           labelText: 'Select Book',
                           border: OutlineInputBorder(

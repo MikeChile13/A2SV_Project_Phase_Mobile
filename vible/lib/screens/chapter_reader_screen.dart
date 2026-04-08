@@ -26,13 +26,27 @@ class ChapterReaderScreen extends ConsumerStatefulWidget {
   ConsumerState<ChapterReaderScreen> createState() => _ChapterReaderScreenState();
 }
 
-class _ChapterReaderScreenState extends ConsumerState<ChapterReaderScreen> {
+class _ChapterReaderScreenState extends ConsumerState<ChapterReaderScreen>
+    with SingleTickerProviderStateMixin {
   bool _highlightMode = false;
   Color? _activeHighlightColor;
   int? _flashVerseIndex;
   bool _shareMode = false;
   bool _copyMode = false;
-  Set<int> _selectedVerses = {};
+  final Set<int> _selectedVerses = {};
+
+  // ── Search state ──────────────────────────────────────────────────────────
+  bool _searchActive = false;
+  String _searchQuery = '';
+  int _searchResultCount = 0;
+  int _currentSearchResultIndex = 0;
+  /// verse index → list of (start, end) character ranges that match
+  Map<int, List<(int, int)>> _searchMatches = {};
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  late final AnimationController _searchAnimController;
+  late final Animation<double> _searchWidthAnimation;
+  // ─────────────────────────────────────────────────────────────────────────
 
   final ItemScrollController _itemScrollController = ItemScrollController();
   final ItemPositionsListener _itemPositionsListener = ItemPositionsListener.create();
@@ -125,6 +139,15 @@ class _ChapterReaderScreenState extends ConsumerState<ChapterReaderScreen> {
   void initState() {
     super.initState();
 
+    _searchAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 280),
+    );
+    _searchWidthAnimation = CurvedAnimation(
+      parent: _searchAnimController,
+      curve: Curves.easeInOut,
+    );
+
     if (widget.initialVerseIndex != null) {
       _flashVerseIndex = widget.initialVerseIndex;
 
@@ -142,6 +165,122 @@ class _ChapterReaderScreenState extends ConsumerState<ChapterReaderScreen> {
       });
     }
   }
+
+  @override
+  void dispose() {
+    _searchAnimController.dispose();
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    super.dispose();
+  }
+
+  // ── Search helpers ────────────────────────────────────────────────────────
+
+  void _openSearch() {
+    setState(() => _searchActive = true);
+    _searchAnimController.forward();
+    Future.delayed(const Duration(milliseconds: 100), () {
+      _searchFocusNode.requestFocus();
+    });
+  }
+
+  void _closeSearch() {
+    _searchFocusNode.unfocus();
+    _searchAnimController.reverse().then((_) {
+      if (mounted) {
+        setState(() {
+          _searchActive = false;
+          _searchQuery = '';
+          _searchMatches = {};
+          _searchResultCount = 0;
+          _currentSearchResultIndex = 0;
+          _searchController.clear();
+        });
+      }
+    });
+  }
+
+  /// Rebuilds [_searchMatches] for [query] against [verses].
+  void _runSearch(String query, List<String> verses) {
+    if (query.trim().isEmpty) {
+      setState(() {
+        _searchQuery = '';
+        _searchMatches = {};
+        _searchResultCount = 0;
+        _currentSearchResultIndex = 0;
+      });
+      return;
+    }
+
+    final lowerQuery = query.toLowerCase();
+    final Map<int, List<(int, int)>> matches = {};
+    int totalCount = 0;
+
+    for (int vi = 0; vi < verses.length; vi++) {
+      final lowerVerse = verses[vi].toLowerCase();
+      int start = 0;
+      final List<(int, int)> verseMatches = [];
+
+      while (true) {
+        final idx = lowerVerse.indexOf(lowerQuery, start);
+        if (idx == -1) break;
+        verseMatches.add((idx, idx + lowerQuery.length));
+        totalCount++;
+        start = idx + lowerQuery.length;
+      }
+
+      if (verseMatches.isNotEmpty) {
+        matches[vi] = verseMatches;
+      }
+    }
+
+    setState(() {
+      _searchQuery = query;
+      _searchMatches = matches;
+      _searchResultCount = totalCount;
+      _currentSearchResultIndex = totalCount > 0 ? 1 : 0;
+    });
+
+    // Scroll to first match
+    if (matches.isNotEmpty) {
+      final firstVerseIndex = matches.keys.first;
+      _itemScrollController.scrollTo(
+        index: firstVerseIndex,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+        alignment: 0.3,
+      );
+    }
+  }
+
+  /// Navigate between search results (direction: +1 or -1).
+  void _navigateSearchResult(int direction, List<String> verses) {
+    if (_searchResultCount == 0) return;
+
+    int nextIndex = _currentSearchResultIndex + direction;
+    if (nextIndex < 1) nextIndex = _searchResultCount;
+    if (nextIndex > _searchResultCount) nextIndex = 1;
+
+    setState(() => _currentSearchResultIndex = nextIndex);
+
+    // Find the verse that contains the nth result
+    int count = 0;
+    for (final entry in _searchMatches.entries) {
+      final verseMatchCount = entry.value.length;
+      if (count + verseMatchCount >= nextIndex) {
+        _itemScrollController.scrollTo(
+          index: entry.key,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeInOut,
+          alignment: 0.3,
+        );
+        break;
+      }
+      count += verseMatchCount;
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
 
   void _enterHighlightMode(Color color) {
     setState(() {
@@ -234,7 +373,6 @@ class _ChapterReaderScreenState extends ConsumerState<ChapterReaderScreen> {
       if (verseIndices[i] == rangeEnd + 1) {
         rangeEnd = verseIndices[i];
       } else {
-        // Add the current range
         if (rangeStart == rangeEnd) {
           ranges.add('${rangeStart + 1}');
         } else {
@@ -245,7 +383,6 @@ class _ChapterReaderScreenState extends ConsumerState<ChapterReaderScreen> {
       }
     }
 
-    // Add the last range
     if (rangeStart == rangeEnd) {
       ranges.add('${rangeStart + 1}');
     } else {
@@ -273,7 +410,7 @@ class _ChapterReaderScreenState extends ConsumerState<ChapterReaderScreen> {
     final copyText = '$bookChapter\n\n$verseLines';
 
     await Clipboard.setData(ClipboardData(text: copyText));
-    
+
     if (mounted) {
       if (_copyMode) {
         _exitCopyMode();
@@ -292,7 +429,7 @@ class _ChapterReaderScreenState extends ConsumerState<ChapterReaderScreen> {
     ref.read(highlightProvider.notifier).toggleHighlight(
           _chapterKey,
           verseIndex,
-          _activeHighlightColor!.value,
+          _activeHighlightColor!.toARGB32(),
         );
   }
 
@@ -398,12 +535,15 @@ class _ChapterReaderScreenState extends ConsumerState<ChapterReaderScreen> {
   ) {
     final bookmarkNotifier = ref.read(bookmarkProvider.notifier);
     final bookmarks = ref.read(bookmarkProvider);
-    
-    final existingBookmark = bookmarks.where(
-      (b) => b.bookIndex == widget.bookIndex &&
-          b.chapterIndex == widget.chapterIndex &&
-          b.verseIndex == verseIndex,
-    ).firstOrNull;
+
+    final existingBookmark = bookmarks
+        .where(
+          (b) =>
+              b.bookIndex == widget.bookIndex &&
+              b.chapterIndex == widget.chapterIndex &&
+              b.verseIndex == verseIndex,
+        )
+        .firstOrNull;
 
     final noteController = TextEditingController(text: existingBookmark?.note ?? '');
 
@@ -443,7 +583,8 @@ class _ChapterReaderScreenState extends ConsumerState<ChapterReaderScreen> {
               );
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Bookmark added'), duration: Duration(seconds: 1)),
+                const SnackBar(
+                    content: Text('Bookmark added'), duration: Duration(seconds: 1)),
               );
             },
             child: const Text('Bookmark'),
@@ -452,6 +593,67 @@ class _ChapterReaderScreenState extends ConsumerState<ChapterReaderScreen> {
       ),
     );
   }
+
+  // ── Verse text builder with search highlighting ───────────────────────────
+
+  /// Builds a [TextSpan] for [verseText] at [verseIndex], wrapping any
+  /// search-query matches in a highlighted span using [searchHighlightColor].
+  TextSpan _buildVerseTextSpan({
+    required int verseIndex,
+    required String verseText,
+    required bool isBookmarked,
+    required Color searchHighlightColor,
+  }) {
+    final baseStyle = const TextStyle(
+      fontSize: 18,
+      color: Colors.white70,
+      height: 1.4,
+    );
+
+    final List<InlineSpan> children = [
+      if (isBookmarked)
+        const WidgetSpan(
+          child: Padding(
+            padding: EdgeInsets.only(right: 8),
+            child: Icon(Icons.bookmark, size: 18, color: Colors.amber),
+          ),
+        ),
+      TextSpan(
+        text: '${verseIndex + 1}. ',
+        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+      ),
+    ];
+
+    final matches = _searchMatches[verseIndex];
+    if (matches == null || matches.isEmpty || _searchQuery.isEmpty) {
+      children.add(TextSpan(text: verseText));
+    } else {
+      int cursor = 0;
+      for (final (start, end) in matches) {
+        if (cursor < start) {
+          children.add(TextSpan(text: verseText.substring(cursor, start)));
+        }
+        children.add(
+          TextSpan(
+            text: verseText.substring(start, end),
+            style: TextStyle(
+              backgroundColor: searchHighlightColor.withValues(alpha: 0.55),
+              color: Colors.black87,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        );
+        cursor = end;
+      }
+      if (cursor < verseText.length) {
+        children.add(TextSpan(text: verseText.substring(cursor)));
+      }
+    }
+
+    return TextSpan(style: baseStyle, children: children);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -476,11 +678,50 @@ class _ChapterReaderScreenState extends ConsumerState<ChapterReaderScreen> {
 
         return Scaffold(
           appBar: AppBar(
-            title: _ResponsiveChapterTitle(
-              bookTitle: widget.bookTitle,
-              chapterNumber: widget.chapterIndex + 1,
-              getAbbreviation: _getBookAbbreviation,
+            title: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: _searchActive
+                  ? const SizedBox.shrink()
+                  : _ResponsiveChapterTitle(
+                      key: const ValueKey('chapter-title'),
+                      bookTitle: widget.bookTitle,
+                      chapterNumber: widget.chapterIndex + 1,
+                      getAbbreviation: _getBookAbbreviation,
+                    ),
             ),
+            actions: [
+              // ── Expandable search bar ──────────────────────────────────
+              AnimatedBuilder(
+                animation: _searchWidthAnimation,
+                builder: (context, child) {
+                  return SizeTransition(
+                    sizeFactor: _searchWidthAnimation,
+                    axis: Axis.horizontal,
+                    axisAlignment: 1.0,
+                    child: child,
+                  );
+                },
+                child: _searchActive
+                    ? _SearchBar(
+                        controller: _searchController,
+                        focusNode: _searchFocusNode,
+                        resultCount: _searchResultCount,
+                        currentResult: _currentSearchResultIndex,
+                        onChanged: (q) => _runSearch(q, verses),
+                        onPrevious: () => _navigateSearchResult(-1, verses),
+                        onNext: () => _navigateSearchResult(1, verses),
+                        onClose: _closeSearch,
+                      )
+                    : const SizedBox.shrink(),
+              ),
+              if (!_searchActive)
+                IconButton(
+                  icon: const Icon(Icons.search),
+                  tooltip: 'Search chapter',
+                  onPressed: _openSearch,
+                ),
+              // ──────────────────────────────────────────────────────────
+            ],
           ),
           body: Column(
             children: [
@@ -494,22 +735,30 @@ class _ChapterReaderScreenState extends ConsumerState<ChapterReaderScreen> {
                     final verseText = verses[i];
                     final userHighlight = chapterHighlights[i];
 
-                    // Base background from user highlight
-                    final baseColor = userHighlight?.withOpacity(0.25) ?? Colors.transparent;
+                    final baseColor = userHighlight?.withValues(alpha: 0.25) ?? Colors.transparent;
 
-                    // Flash from search
                     final isFlashing = _flashVerseIndex == i;
-                    final flashOverlay = searchHighlightColor.withOpacity(isFlashing ? 0.5 : 0.0);
-                    
-                    // Selection highlight for share/copy mode
+                    final flashOverlay = searchHighlightColor.withValues(alpha: isFlashing ? 0.5 : 0.0);
+
                     final isSelected = _selectedVerses.contains(i);
-                    final selectionHighlight = isSelected ? Colors.blue.withOpacity(0.3) : Colors.transparent;
-                    
+                    final selectionHighlight =
+                        isSelected ? Colors.blue.withValues(alpha: 0.3) : Colors.transparent;
+
+                    final hasSearchMatch =
+                        _searchMatches.containsKey(i) && _searchQuery.isNotEmpty;
+
                     final backgroundColor = (_shareMode || _copyMode)
                         ? Color.lerp(baseColor, selectionHighlight, isSelected ? 1.0 : 0.0)!
-                        : Color.lerp(baseColor, flashOverlay, isFlashing ? 1.0 : 0.0)!;
+                        : isFlashing
+                            ? Color.lerp(baseColor, flashOverlay, 1.0)!
+                            : hasSearchMatch
+                                ? Color.lerp(
+                                    baseColor,
+                                    searchHighlightColor.withValues(alpha: 0.08),
+                                    1.0,
+                                  )!
+                                : baseColor;
 
-                    // Check if this verse is bookmarked
                     final isBookmarked = bookmarkNotifier.isBookmarked(
                       widget.bookIndex,
                       widget.chapterIndex,
@@ -519,7 +768,7 @@ class _ChapterReaderScreenState extends ConsumerState<ChapterReaderScreen> {
                     return Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                       child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 800),
+                        duration: const Duration(milliseconds: 300),
                         curve: Curves.easeOut,
                         decoration: BoxDecoration(
                           color: backgroundColor,
@@ -546,30 +795,11 @@ class _ChapterReaderScreenState extends ConsumerState<ChapterReaderScreen> {
                           child: Padding(
                             padding: const EdgeInsets.all(8),
                             child: RichText(
-                              text: TextSpan(
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  color: Colors.white70,
-                                  height: 1.4,
-                                ),
-                                children: [
-                                  // Bookmark icon if bookmarked
-                                  if (isBookmarked)
-                                    const WidgetSpan(
-                                      child: Padding(
-                                        padding: EdgeInsets.only(right: 8),
-                                        child: Icon(Icons.bookmark, size: 18, color: Colors.amber),
-                                      ),
-                                    ),
-                                  TextSpan(
-                                    text: '${i + 1}. ',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                  TextSpan(text: verseText),
-                                ],
+                              text: _buildVerseTextSpan(
+                                verseIndex: i,
+                                verseText: verseText,
+                                isBookmarked: isBookmarked,
+                                searchHighlightColor: searchHighlightColor,
                               ),
                             ),
                           ),
@@ -585,7 +815,8 @@ class _ChapterReaderScreenState extends ConsumerState<ChapterReaderScreen> {
                   decoration: const BoxDecoration(
                     color: Color(0xFF191919),
                     boxShadow: [
-                      BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, -2)),
+                      BoxShadow(
+                          color: Colors.black26, blurRadius: 8, offset: Offset(0, -2)),
                     ],
                   ),
                   child: Column(
@@ -640,6 +871,100 @@ class _ChapterReaderScreenState extends ConsumerState<ChapterReaderScreen> {
   }
 }
 
+// ── Search bar widget ─────────────────────────────────────────────────────────
+
+class _SearchBar extends StatelessWidget {
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final int resultCount;
+  final int currentResult;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+  final VoidCallback onClose;
+
+  const _SearchBar({
+    required this.controller,
+    required this.focusNode,
+    required this.resultCount,
+    required this.currentResult,
+    required this.onChanged,
+    required this.onPrevious,
+    required this.onNext,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 180,
+          child: TextField(
+            controller: controller,
+            focusNode: focusNode,
+            onChanged: onChanged,
+            textInputAction: TextInputAction.search,
+            onSubmitted: (_) => onNext(),
+            style: const TextStyle(color: Colors.white, fontSize: 15),
+            cursorColor: Colors.white70,
+            decoration: InputDecoration(
+              hintText: 'Search verse…',
+              hintStyle: const TextStyle(color: Colors.white38, fontSize: 14),
+              isDense: true,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              filled: true,
+              fillColor: Colors.white10,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(20),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+        ),
+        if (resultCount > 0) ...[
+          const SizedBox(width: 4),
+          Text(
+            '$currentResult/$resultCount',
+            style: const TextStyle(color: Colors.white54, fontSize: 12),
+          ),
+          IconButton(
+            icon: const Icon(Icons.keyboard_arrow_up, size: 20),
+            tooltip: 'Previous result',
+            onPressed: onPrevious,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+          IconButton(
+            icon: const Icon(Icons.keyboard_arrow_down, size: 20),
+            tooltip: 'Next result',
+            onPressed: onNext,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+        ] else if (controller.text.isNotEmpty) ...[
+          const SizedBox(width: 6),
+          const Text(
+            'No results',
+            style: TextStyle(color: Colors.white38, fontSize: 12),
+          ),
+        ],
+        IconButton(
+          icon: const Icon(Icons.close, size: 20),
+          tooltip: 'Close search',
+          onPressed: onClose,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Existing unchanged widgets ────────────────────────────────────────────────
+
 class _ResponsiveChapterTitle extends StatelessWidget {
   final String bookTitle;
   final int chapterNumber;
@@ -649,29 +974,25 @@ class _ResponsiveChapterTitle extends StatelessWidget {
     required this.bookTitle,
     required this.chapterNumber,
     required this.getAbbreviation,
+    super.key,
   });
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Determine title based on available width
         final width = constraints.maxWidth;
         String title;
 
         if (width > 200) {
-          // Full title: "Genesis - Chapter 1"
           title = '$bookTitle - Chapter $chapterNumber';
         } else if (width > 140) {
-          // Medium abbreviation: "Gen - Ch 1"
           final mediumAbbrev = getAbbreviation(bookTitle, 'medium');
           title = '$mediumAbbrev - Ch $chapterNumber';
         } else if (width > 100) {
-          // Short abbreviation: "Gn - Ch 1"
           final shortAbbrev = getAbbreviation(bookTitle, 'short');
           title = '$shortAbbrev - Ch $chapterNumber';
         } else {
-          // Very short: "Gn 1"
           final shortAbbrev = getAbbreviation(bookTitle, 'short');
           title = '$shortAbbrev $chapterNumber';
         }
